@@ -1,0 +1,18 @@
+(require ´[main.utils :as utils]) (def response (utils/fetch-from-api "/sports/2/events/2020-09-20" {:include "scores" :affiliate_ids "1,2,3" :offset "0"})) (println response)
+(require ´[main.utils :as utils])
+(require '[main.utils :as utils])
+(def response (utils/fetch-from-api "/sports/2/events/2020-09-20"
+{:include "scores" 
+:affiliate_ids "1,2,3" 
+:offset "0"}))
+(println response)
+lein run
+(user/register-user "João 100.0)
+(require '[main.user :as user])
+(user/register-user "João" 100.0)
+(user/list-users)
+(require 'main.core)
+(main.core/-main)
+(require 'main.core)
+(main.core/-main)
+7

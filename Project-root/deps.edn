@@ -1,0 +1,6 @@
+{:deps {org.clojure/clojure {:mvn/version "1.10.3"}
+        io.pedestal/pedestal.service {:mvn/version "0.5.10"}
+        io.pedestal/pedestal.jetty {:mvn/version "0.5.10"}
+        clj-http {:mvn/version "3.12.3"}
+        cheshire {:mvn/version "5.10.1"}
+        com.novemberain/monger {:mvn/version "3.5.0"}}}
