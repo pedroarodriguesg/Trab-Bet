@@ -21,7 +21,8 @@
   (println "4. Filtrar Jogos por Data")
   (println "5. Realizar Aposta")
   (println "6. Consultar Apostas Realizadas")
-  (println "7. Sair")
+  (println "7. Liquidar Aposta")
+  (println "8. Sair")
   (println "Escolha uma opcao:"))
 
 (defn adicionar-saldo []
@@ -33,15 +34,15 @@
           (do
             (saldo/atualizar-saldo valor-num)
             (println (str "Saldo atualizado com sucesso! Saldo atual: R$" (saldo/consultar-saldo))))
-          (println "Valor inválido! Deve ser maior que zero.")))
+          (println "Valor invalido! Deve ser maior que zero.")))
       (catch Exception _ 
-        (println "Erro: valor inválido!")))))
+        (println "Erro: valor invalido!")))))
 
 (defn consultar-saldo []
   (println (str "Seu saldo atual é: R$" (saldo/consultar-saldo))))
 
 (defn escolher-esporte []
-  (println "Buscando esportes disponíveis...")
+  (println "Buscando esportes disponiveis...")
   (let [sport-id (handlers/listar-esportes {})]
     (if sport-id
       (do
@@ -81,8 +82,8 @@
                   jogos (filter #(= data (extrair-data (:date_event %))) schedules)]
               (if (seq jogos)
                 (do
-                  (reset! selected-date data)      ;; Salvar a data selecionada
-                  (reset! filtered-games jogos)    ;; Salvar os jogos filtrados
+                  (reset! selected-date data)      
+                  (reset! filtered-games jogos)    
                   (println "\n--- JOGOS ENCONTRADOS ---")
                   (doseq [[idx jogo] (map-indexed vector jogos)]
                     (println (str (inc idx) ". " (formatar-jogo jogo))))
@@ -90,7 +91,7 @@
                 (println "Nenhum jogo encontrado para esta data.")))
             (catch Exception e
               (println "Erro ao buscar jogos: " (.getMessage e))))
-          (println "Data inválida! Certifique-se de usar o formato YYYY-MM-DD."))))
+          (println "Data invalida! Certifique-se de usar o formato YYYY-MM-DD."))))
     (println "Por favor, escolha um esporte primeiro (opção 3).")))
 
 (defn formatar-odds [odds]
@@ -102,49 +103,107 @@
          ", Away Odds: " away-odds
          (when draw-odds (str ", Draw Odds: " draw-odds)))))
 
-(defn formatar-jogo-com-odds [jogo odds]
-  "Formata os detalhes de um jogo incluindo as odds para exibição organizada."
-  (str "Home Team: " (:home_team jogo) "\n"
-       "Away Team: " (:away_team jogo) "\n"
-       "Event Date: " (:date_event jogo) "\n"
-       "Event Name: " (:event_name jogo) "\n"
-       (formatar-odds odds) "\n"
-       "---"))
+(defn american-to-decimal [odds]
+  "Converte odds no formato American para Decimal."
+  (if (pos? odds)
+    (format "%.2f" (+ (/ odds 100.0) 1))
+    (format "%.2f" (+ (/ 100.0 (Math/abs odds)) 1))))
+
+(defn formatar-jogo-com-odds [jogo odds handicap]
+  (let [home-odds (if odds (american-to-decimal (:moneyline_home odds)) "N/D")
+        draw-odds (if odds (american-to-decimal (:moneyline_draw odds)) "N/D")
+        away-odds (if odds (american-to-decimal (:moneyline_away odds)) "N/D")
+        home-handicap (if handicap (american-to-decimal (:point_spread_home_money handicap)) "N/D")
+        away-handicap (if handicap (american-to-decimal (:point_spread_away_money handicap)) "N/D")]
+    (str "Home Team: " (:home_team jogo) "\n"
+         "Away Team: " (:away_team jogo) "\n"
+         "Event Date: " (:date_event jogo) "\n"
+         "Event Name: " (:event_name jogo) "\n"
+         "Odds: Home " home-odds ", Draw " draw-odds ", Away " away-odds "\n"
+         "Handicap: Home " home-handicap " (" (:point_spread_home handicap) "), "
+         "Away " away-handicap " (" (:point_spread_away handicap) ")\n"
+         "---")))
 
 (defn realizar-aposta []
-  (if-let [sport-id @selected-sport-id]
-    (if (seq @filtered-games)
+  (if-not @selected-sport-id
+    (println "Por favor, escolha um esporte primeiro (opção 3).")
+    (if (empty? @filtered-games)
+      (println "Por favor, filtre os jogos por data primeiro (opção 4).")
       (do
-        (let [jogos @filtered-games]
-          ;; Exibir jogos com odds atualizadas
-          (println "\n--- JOGOS DISPONÍVEIS PARA APOSTA ---")
-          (doseq [[idx jogo] (map-indexed vector jogos)]
-            (let [game-id (:event_id jogo)
-                  odds (utils/fetch-odds game-id)]
-              (if odds
-                (println (str (inc idx) ". " (formatar-jogo-com-odds jogo odds)))
-                (println (str (inc idx) ". " (formatar-jogo jogo) "\nOdds nao disponíveis.\n---")))))
-          ;; Solicitar que o usuário escolha um jogo
-          (println "Escolha o número do jogo:")
-          (let [escolha (read-line)]
-            (try
-              (let [indice (Integer/parseInt escolha)
-                    jogo (nth jogos (dec indice))]
-                ;; Prosseguir com a aposta
-                (println "Digite o valor da aposta:")
-                (let [valor (read-line)
-                      valor-num (Double/parseDouble valor)]
-                  (if (saldo/realizar-aposta valor-num)
-                    (do
-                      (swap! apostas conj {:jogo jogo :valor valor-num})
-                      (println (str "Aposta realizada com sucesso no jogo: " (:event_name jogo)))
-                      (println (str "Saldo atualizado: R$" (saldo/consultar-saldo))))
-                    (println "Erro: saldo insuficiente."))))
-              (catch Exception e
-                (println "Erro: opção ou valor inválido!" (.getMessage e))))))
-      (println "Por favor, filtre os jogos por data primeiro (opção 4).")))
-    (println "Por favor, escolha um esporte primeiro (opção 3).")))
+        (println "\n--- JOGOS DISPONiVEIS ---")
+        (doseq [[idx jogo] (map-indexed vector @filtered-games)]
+          (let [event-id (:event_id jogo)
+                odds-response (utils/fetch-odds event-id)]
+            (if (and odds-response (:moneyline odds-response))
+              (let [odds (:moneyline odds-response)
+                    handicap (:spread odds-response)]
+                (println (str (inc idx) ". " (formatar-jogo-com-odds jogo odds handicap))))
+              (println (str (inc idx) ". " (formatar-jogo jogo) "\nOdds ou handicap nao disponiveis.\n---")))))
 
+        (println "Escolha o numero do jogo para apostar:")
+        (let [escolha (read-line)]
+          (try
+            (let [indice (Integer/parseInt escolha)
+                  jogo (nth @filtered-games (dec indice))
+                  event-id (:event_id jogo)
+                  odds-response (utils/fetch-odds event-id)
+                  odds (:moneyline odds-response)
+                  handicap (:spread odds-response)]
+
+              (println "Escolha o mercado para apostar:")
+              (println "1. Vitória/Empate/Derrota")
+              (println "2. Handicap")
+              (let [mercado-escolha (read-line)]
+                (case mercado-escolha
+                  "1"
+                  (do
+                    (println "Escolha a opção:")
+                    (println "1. Vitória Home")
+                    (println "2. Empate")
+                    (println "3. Vitória Away")
+                    (let [opcao (read-line)
+                          selecao (case opcao
+                                    "1" "Home"
+                                    "2" "Draw"
+                                    "3" "Away"
+                                    (throw (Exception. "Opção inválida!")))]
+                      (println "Digite o valor da aposta:")
+                      (let [valor (read-line)
+                            valor-num (Double/parseDouble valor)]
+                        (if (<= valor-num (saldo/consultar-saldo))
+                          (if (saldo/realizar-aposta valor-num)
+                            (do
+                              (swap! apostas conj {:jogo jogo :mercado "Vitória/Empate/Derrota"
+                                                   :selecao selecao :valor valor-num :status :pendente})
+                              (println (str "Aposta realizada com sucesso no jogo: " (:event_name jogo))))
+                            (println "Erro ao processar a aposta."))
+                          (println "Erro: o valor da aposta excede o saldo disponível.")))))
+
+                  "2"
+                  (do
+                    (println "Escolha a opção:")
+                    (println (str "1. Handicap Home (" (:point_spread_home handicap) ")"))
+                    (println (str "2. Handicap Away (" (:point_spread_away handicap) ")"))
+                    (let [opcao (read-line)
+                          selecao (case opcao
+                                    "1" "Handicap Home"
+                                    "2" "Handicap Away"
+                                    (throw (Exception. "Opção invalida!")))]
+                      (println "Digite o valor da aposta:")
+                      (let [valor (read-line)
+                            valor-num (Double/parseDouble valor)]
+                        (if (<= valor-num (saldo/consultar-saldo))
+                          (if (saldo/realizar-aposta valor-num)
+                            (do
+                              (swap! apostas conj {:jogo jogo :mercado "Handicap"
+                                                   :selecao selecao :valor valor-num :status :pendente})
+                              (println (str "Aposta realizada com sucesso no jogo: " (:event_name jogo))))
+                            (println "Erro ao processar a aposta."))
+                          (println "Erro: o valor da aposta excede o saldo disponível.")))))
+
+                  (println "Mercado inválido!"))))
+            (catch Exception e
+              (println "Erro ao realizar aposta: " (.getMessage e)))))))))
 
 (defn consultar-apostas-realizadas []
   (if (seq @apostas)
@@ -152,6 +211,51 @@
       (println "Apostas realizadas:")
       (pprint @apostas))
     (println "Nenhuma aposta realizada até o momento.")))
+
+(defn liquidar-apostas []
+  "Liquida as apostas pendentes e atualiza o saldo de acordo com o resultado do jogo."
+  (println "---")
+  (let [apostas-nao-liquidada (filter #(= (:status %) :pendente) @apostas)]
+    (if (seq apostas-nao-liquidada)
+      (doseq [aposta apostas-nao-liquidada]
+        (let [event-id (:event_id (:jogo aposta))
+              odds-response (utils/fetch-odds event-id)
+              resultado (:resultado odds-response)
+              selecao (:selecao aposta)
+              odds (case selecao
+                     "Home" (when odds-response
+                              (american-to-decimal (get-in odds-response [:moneyline :moneyline_home])))
+                     "Draw" (when odds-response
+                              (american-to-decimal (get-in odds-response [:moneyline :moneyline_draw])))
+                     "Away" (when odds-response
+                              (american-to-decimal (get-in odds-response [:moneyline :moneyline_away])))
+                     "Handicap Home" (when odds-response
+                                       (american-to-decimal (get-in odds-response [:spread :point_spread_home_money])))
+                     "Handicap Away" (when odds-response
+                                       (american-to-decimal (get-in odds-response [:spread :point_spread_away_money]))))]
+          (if (and odds resultado)
+            (let [valor-aposta (:valor aposta)
+                  lucro (- (* valor-aposta (Double/parseDouble odds)) valor-aposta)] 
+              (cond
+                (= selecao resultado)
+                (do
+                  (saldo/atualizar-saldo lucro)
+                  (swap! apostas
+                         (fn [apostas]
+                           (map #(if (= % aposta) (assoc % :status :vencedora) %) apostas)))
+                  (println (str "Aposta ganha! R$" (format "%.2f" lucro)
+                                ". Saldo atualizado: R$" (saldo/consultar-saldo))))
+
+                :else
+                (do
+                  (swap! apostas
+                         (fn [apostas]
+                           (map #(if (= % aposta) (assoc % :status :perdida) %) apostas)))
+                  (println "Aposta perdida."))))
+            (println (str "Dados insuficientes para processar a aposta no evento " event-id)))))
+      (println "Nenhuma aposta pendente para liquidar.")))
+  (println "---"))
+
 
 (defn executar-menu []
   (loop []
@@ -164,7 +268,8 @@
         "4" (filtrar-jogos-por-data)
         "5" (realizar-aposta)
         "6" (consultar-apostas-realizadas)
-        "7" (do (println "Saindo...") (System/exit 0))
+        "7" (liquidar-apostas)
+        "8" (do (println "Saindo...") (System/exit 0))
         (println "Opcao inválida!"))
       (recur))))
 

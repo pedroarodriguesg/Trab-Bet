@@ -32,13 +32,18 @@
     (catch Exception e
       (println "Erro ao listar esportes:" (.getMessage e)))))
 
-(defn get-odds-handler
+(defn get-event-handler
+  "Handler para buscar informações detalhadas de um evento pelo ID."
   [request]
-  (let [game-id (get-in request [:path-params :game-id])
-        odds (utils/fetch-odds game-id)]
-    {:status 200
-     :headers {"Content-Type" "application/json"}
-     :body (json/generate-string odds)}))
+  (let [event-id (get-in request [:path-params :event-id])
+        event-data (utils/fetch-odds event-id)]
+    (if event-data
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string event-data)}
+      {:status 404
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string {:mensagem "Evento não encontrado ou erro ao buscar dados."})})))
 
 (defn listar-schedules
   "Lista o cronograma de eventos para um esporte específico."
@@ -100,7 +105,7 @@
            :body (json/generate-string resultado)})
         {:status 400
          :headers {"Content-Type" "application/json"}
-         :body (json/generate-string {:mensagem "Valor inválido para realizar aposta"})}))
+         :body (json/generate-string {:mensagem "Valor invalido para realizar aposta"})}))
     (catch Exception e
       {:status 500
        :headers {"Content-Type" "application/json"}
@@ -129,7 +134,7 @@
                                         :aposta aposta})})
         {:status 400
          :headers {"Content-Type" "application/json"}
-         :body (json/generate-string {:mensagem "Evento não encontrado ou inválido."})}))
+         :body (json/generate-string {:mensagem "Evento nao encontrado ou invalido."})}))
     (catch Exception e
       {:status 500
        :headers {"Content-Type" "application/json"}
